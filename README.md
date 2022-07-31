@@ -79,6 +79,11 @@ This schema has tradeoffs.
   accidentally _increasing_ the memory requirements of some datasets
   seems like it would require compression-like logic.
 
+## Running it
+
+This repo is using Node's built-in test framework (as of Node v18).
+So, have Node v18 and run `node --test`. No deps are required so far.
+
 ## Future
 
 The future of this would be to use it in [Placemark](https://www.placemark.io/),
