@@ -35,6 +35,7 @@ This takes GeoJSON as input and stores it in three objects:
 2. A Uint32Array of indexes, which informs the reader of the types of geometries
    and lengths of coordinate rings.
 3. A Float64Array of coordinates.
+3. A Uint32Array of lookup offsets into the indexes & coordinates arrays.
 
 Basically it's an offset based system. You read the file from
 the start, and let's say the first feature has a Point geometry.
@@ -50,10 +51,11 @@ it reads that number of coordinates and produces a LineString geometry.
 
 This schema has tradeoffs.
 
-- Seeking is difficult, there is currently no affordance for
+- ~~Seeking is difficult, there is currently no affordance for
   randomly jumping to and extracting a geometry. It's not entirely
   clear that this is necessary - skipping would be simple to implement.
-  However, something like an index-of-indexes could be constructed.
+  However, something like an index-of-indexes could be constructed.~~
+  Seeking to a specific feature is implemented!
 - It's not clear yet how to encode the z index, the 3rd item in a
   GeoJSON Position. Right now this defaults that 3rd item to 0, but
   that is not ideal: a coordinate with z=0 is not the same as a coordinate
