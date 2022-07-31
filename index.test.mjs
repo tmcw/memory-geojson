@@ -38,11 +38,21 @@ const input = [
       x: 1,
     },
     geometry: {
+      type: "Point",
+      coordinates: [42.32, 24.2, 20],
+    },
+  },
+  {
+    type: "Feature",
+    properties: {
+      x: 1,
+    },
+    geometry: {
       type: "GeometryCollection",
       geometries: [
         {
           type: "Point",
-          coordinates: [42.32, 24.2, 0],
+          coordinates: [42.32, 24.2],
         },
       ],
     },
@@ -162,7 +172,11 @@ function toMemory(features) {
         const coordinate = geometry.coordinates;
         writeCoordinate(coordinateArray, coordinateIndex++, coordinate[0]);
         writeCoordinate(coordinateArray, coordinateIndex++, coordinate[1]);
-        writeCoordinate(coordinateArray, coordinateIndex++, coordinate[2] || 0);
+        writeCoordinate(
+          coordinateArray,
+          coordinateIndex++,
+          coordinate[2] ?? -0
+        );
         break;
       }
       case "MultiPoint":
@@ -174,7 +188,7 @@ function toMemory(features) {
           writeCoordinate(
             coordinateArray,
             coordinateIndex++,
-            coordinate[2] || 0
+            coordinate[2] ?? -0
           );
         }
         break;
@@ -190,7 +204,7 @@ function toMemory(features) {
             writeCoordinate(
               coordinateArray,
               coordinateIndex++,
-              coordinate[2] || 0
+              coordinate[2] ?? -0
             );
           }
         }
@@ -216,7 +230,7 @@ function toMemory(features) {
               writeCoordinate(
                 coordinateArray,
                 coordinateIndex++,
-                coordinate[2] || 0
+                coordinate[2] ?? -0
               );
             }
           }
@@ -272,8 +286,9 @@ function fromMemory({ coordinateArray, indexes, featureProperties }) {
         coordinates = [
           coordinateArray[coordinateIndex++],
           coordinateArray[coordinateIndex++],
-          coordinateArray[coordinateIndex++],
         ];
+        const z = coordinateArray[coordinateIndex++];
+        if (!Object.is(z, -0)) coordinates.push(z);
         break;
       }
       case "MultiPoint":
@@ -281,11 +296,13 @@ function fromMemory({ coordinateArray, indexes, featureProperties }) {
         const len = indexes[indexIndex++];
         coordinates = [];
         for (let i = 0; i < len; i++) {
-          coordinates.push([
+          const position = [
             coordinateArray[coordinateIndex++],
             coordinateArray[coordinateIndex++],
-            coordinateArray[coordinateIndex++],
-          ]);
+          ];
+          coordinates.push(position);
+          const z = coordinateArray[coordinateIndex++];
+          if (!Object.is(z, -0)) position.push(z);
         }
         break;
       }
@@ -297,11 +314,13 @@ function fromMemory({ coordinateArray, indexes, featureProperties }) {
           const len = indexes[indexIndex++];
           const ring = [];
           for (let i = 0; i < len; i++) {
-            ring.push([
+            const position = [
               coordinateArray[coordinateIndex++],
               coordinateArray[coordinateIndex++],
-              coordinateArray[coordinateIndex++],
-            ]);
+            ];
+            ring.push(position);
+            const z = coordinateArray[coordinateIndex++];
+            if (!Object.is(z, -0)) position.push(z);
           }
           coordinates.push(ring);
         }
@@ -317,11 +336,13 @@ function fromMemory({ coordinateArray, indexes, featureProperties }) {
             const len = indexes[indexIndex++];
             const ring = [];
             for (let i = 0; i < len; i++) {
-              ring.push([
+              const position = [
                 coordinateArray[coordinateIndex++],
                 coordinateArray[coordinateIndex++],
-                coordinateArray[coordinateIndex++],
-              ]);
+              ];
+              ring.push(position);
+              const z = coordinateArray[coordinateIndex++];
+              if (!Object.is(z, -0)) position.push(z);
             }
             polygon.push(ring);
           }
