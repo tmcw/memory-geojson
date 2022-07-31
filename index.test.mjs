@@ -144,6 +144,19 @@ function writeCoordinate(typedArrayWrapper, index, val) {
   }
 }
 
+const NONE = NaN;
+
+function isSome(value) {
+  return !isNaN(value);
+}
+
+function writePosition(coordinateArray, coordinate, coordinateIndex) {
+  writeCoordinate(coordinateArray, coordinateIndex++, coordinate[0]);
+  writeCoordinate(coordinateArray, coordinateIndex++, coordinate[1]);
+  writeCoordinate(coordinateArray, coordinateIndex++, coordinate[2] ?? NONE);
+  return coordinateIndex;
+}
+
 function toMemory(features) {
   const coordinateArray = { _: new Float64Array(8) };
   const indexes = { _: new Uint32Array(8) };
@@ -170,12 +183,10 @@ function toMemory(features) {
       }
       case "Point": {
         const coordinate = geometry.coordinates;
-        writeCoordinate(coordinateArray, coordinateIndex++, coordinate[0]);
-        writeCoordinate(coordinateArray, coordinateIndex++, coordinate[1]);
-        writeCoordinate(
+        coordinateIndex = writePosition(
           coordinateArray,
-          coordinateIndex++,
-          coordinate[2] ?? -0
+          coordinate,
+          coordinateIndex
         );
         break;
       }
@@ -183,12 +194,10 @@ function toMemory(features) {
       case "LineString": {
         writeInt(indexes, indexIndex++, geometry.coordinates.length);
         for (let coordinate of geometry.coordinates) {
-          writeCoordinate(coordinateArray, coordinateIndex++, coordinate[0]);
-          writeCoordinate(coordinateArray, coordinateIndex++, coordinate[1]);
-          writeCoordinate(
+          coordinateIndex = writePosition(
             coordinateArray,
-            coordinateIndex++,
-            coordinate[2] ?? -0
+            coordinate,
+            coordinateIndex
           );
         }
         break;
@@ -199,12 +208,10 @@ function toMemory(features) {
         for (let ring of geometry.coordinates) {
           writeInt(indexes, indexIndex++, ring.length);
           for (let coordinate of ring) {
-            writeCoordinate(coordinateArray, coordinateIndex++, coordinate[0]);
-            writeCoordinate(coordinateArray, coordinateIndex++, coordinate[1]);
-            writeCoordinate(
+            coordinateIndex = writePosition(
               coordinateArray,
-              coordinateIndex++,
-              coordinate[2] ?? -0
+              coordinate,
+              coordinateIndex
             );
           }
         }
@@ -217,20 +224,10 @@ function toMemory(features) {
           for (let ring of polygon) {
             writeInt(indexes, indexIndex++, ring.length);
             for (let coordinate of ring) {
-              writeCoordinate(
+              coordinateIndex = writePosition(
                 coordinateArray,
-                coordinateIndex++,
-                coordinate[0]
-              );
-              writeCoordinate(
-                coordinateArray,
-                coordinateIndex++,
-                coordinate[1]
-              );
-              writeCoordinate(
-                coordinateArray,
-                coordinateIndex++,
-                coordinate[2] ?? -0
+                coordinate,
+                coordinateIndex
               );
             }
           }
@@ -253,6 +250,27 @@ function toMemory(features) {
   };
 }
 
+function getCoordinates(coordinateIndex, coordinateArray) {
+  if (true) {
+    const coordinates = [
+      coordinateArray[coordinateIndex++],
+      coordinateArray[coordinateIndex++],
+    ];
+    const z = coordinateArray[coordinateIndex++];
+    if (isSome(z)) coordinates.push(z);
+    return [coordinates, coordinateIndex];
+  } else {
+    const z = coordinateArray[coordinateIndex + 2];
+    const size = isSome(z) ? 3 : 2;
+    let coordinates = coordinateArray.slice(
+      coordinateIndex,
+      coordinateIndex + size
+    );
+    coordinateIndex += 3;
+    return [coordinates, coordinateIndex];
+  }
+}
+
 function fromMemory({ coordinateArray, indexes, featureProperties }) {
   const features = [];
 
@@ -266,7 +284,6 @@ function fromMemory({ coordinateArray, indexes, featureProperties }) {
     switch (geometryType) {
       case "None": {
         return null;
-        break;
       }
       case "GeometryCollection": {
         const len = indexes[indexIndex++];
@@ -280,15 +297,12 @@ function fromMemory({ coordinateArray, indexes, featureProperties }) {
           type: "GeometryCollection",
           geometries,
         };
-        break;
       }
       case "Point": {
-        coordinates = [
-          coordinateArray[coordinateIndex++],
-          coordinateArray[coordinateIndex++],
-        ];
-        const z = coordinateArray[coordinateIndex++];
-        if (!Object.is(z, -0)) coordinates.push(z);
+        [coordinates, coordinateIndex] = getCoordinates(
+          coordinateIndex,
+          coordinateArray
+        );
         break;
       }
       case "MultiPoint":
@@ -296,13 +310,12 @@ function fromMemory({ coordinateArray, indexes, featureProperties }) {
         const len = indexes[indexIndex++];
         coordinates = [];
         for (let i = 0; i < len; i++) {
-          const position = [
-            coordinateArray[coordinateIndex++],
-            coordinateArray[coordinateIndex++],
-          ];
+          let position;
+          [position, coordinateIndex] = getCoordinates(
+            coordinateIndex,
+            coordinateArray
+          );
           coordinates.push(position);
-          const z = coordinateArray[coordinateIndex++];
-          if (!Object.is(z, -0)) position.push(z);
         }
         break;
       }
@@ -314,13 +327,12 @@ function fromMemory({ coordinateArray, indexes, featureProperties }) {
           const len = indexes[indexIndex++];
           const ring = [];
           for (let i = 0; i < len; i++) {
-            const position = [
-              coordinateArray[coordinateIndex++],
-              coordinateArray[coordinateIndex++],
-            ];
+            let position;
+            [position, coordinateIndex] = getCoordinates(
+              coordinateIndex,
+              coordinateArray
+            );
             ring.push(position);
-            const z = coordinateArray[coordinateIndex++];
-            if (!Object.is(z, -0)) position.push(z);
           }
           coordinates.push(ring);
         }
@@ -336,13 +348,12 @@ function fromMemory({ coordinateArray, indexes, featureProperties }) {
             const len = indexes[indexIndex++];
             const ring = [];
             for (let i = 0; i < len; i++) {
-              const position = [
-                coordinateArray[coordinateIndex++],
-                coordinateArray[coordinateIndex++],
-              ];
+              let position;
+              [position, coordinateIndex] = getCoordinates(
+                coordinateIndex,
+                coordinateArray
+              );
               ring.push(position);
-              const z = coordinateArray[coordinateIndex++];
-              if (!Object.is(z, -0)) position.push(z);
             }
             polygon.push(ring);
           }
