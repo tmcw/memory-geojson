@@ -88,3 +88,9 @@ So, have Node v18 and run `node --test`. No deps are required so far.
 
 The future of this would be to use it in [Placemark](https://www.placemark.io/),
 which would benefit from a more efficient memory encoding of features.
+
+## Prior art
+
+- [mapshaper](https://github.com/mbloch/mapshaper)
+- [visgl geojsonToBinary](https://github.com/visgl/loaders.gl/blob/master/modules/gis/docs/api-reference/geojson-to-binary.md)
+- [geo-arrow-spec](https://github.com/geopandas/geo-arrow-spec/blob/main/format.md)
