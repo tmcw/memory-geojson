@@ -108,15 +108,35 @@ const GEOMETRY_TYPES_INVERT = Object.fromEntries(
   Object.entries(GEOMETRY_TYPES).map((entry) => entry.reverse())
 );
 
-function resize(typedArray) {
-  const newArray = Uint32Array(typedArray.byteLength * 2);
-  newArray.set(newArray);
-  return newArray;
+function writeInt(typedArrayWrapper, index, val) {
+  const typedArray = typedArrayWrapper._;
+  const len = typedArray.length;
+  if (index === len - 1) {
+    const newArray = new Uint32Array(len * 2);
+    newArray.set(typedArray);
+    newArray[index] = val;
+    typedArrayWrapper._ = newArray;
+  } else {
+    typedArray[index] = val;
+  }
+}
+
+function writeCoordinate(typedArrayWrapper, index, val) {
+  const typedArray = typedArrayWrapper._;
+  const len = typedArray.length;
+  if (index === len - 4) {
+    const newArray = new Float64Array(len * 2);
+    newArray.set(typedArray);
+    newArray[index] = val;
+    typedArrayWrapper._ = newArray;
+  } else {
+    typedArray[index] = val;
+  }
 }
 
 function toMemory(features) {
-  const coordinateArray = new Float64Array(512);
-  const indexes = new Uint32Array(512);
+  const coordinateArray = { _: new Float64Array(8) };
+  const indexes = { _: new Uint32Array(8) };
 
   let indexIndex = 0;
   let coordinateIndex = 0;
@@ -124,15 +144,15 @@ function toMemory(features) {
 
   function writeGeometry(geometry) {
     if (!geometry) {
-      indexes[indexIndex++] = GEOMETRY_TYPES.None;
+      writeInt(indexes, indexIndex++, GEOMETRY_TYPES.None);
       return;
     }
 
-    indexes[indexIndex++] = GEOMETRY_TYPES[geometry.type];
+    writeInt(indexes, indexIndex++, GEOMETRY_TYPES[geometry.type]);
 
     switch (geometry.type) {
       case "GeometryCollection": {
-        indexes[indexIndex++] = geometry.geometries.length;
+        writeInt(indexes, indexIndex++, geometry.geometries.length);
         for (let geom of geometry.geometries) {
           writeGeometry(geom);
         }
@@ -140,44 +160,64 @@ function toMemory(features) {
       }
       case "Point": {
         const coordinate = geometry.coordinates;
-        coordinateArray[coordinateIndex++] = coordinate[0];
-        coordinateArray[coordinateIndex++] = coordinate[1];
-        coordinateArray[coordinateIndex++] = coordinate[2] || 0;
+        writeCoordinate(coordinateArray, coordinateIndex++, coordinate[0]);
+        writeCoordinate(coordinateArray, coordinateIndex++, coordinate[1]);
+        writeCoordinate(coordinateArray, coordinateIndex++, coordinate[2] || 0);
         break;
       }
       case "MultiPoint":
       case "LineString": {
-        indexes[indexIndex++] = geometry.coordinates.length;
+        writeInt(indexes, indexIndex++, geometry.coordinates.length);
         for (let coordinate of geometry.coordinates) {
-          coordinateArray[coordinateIndex++] = coordinate[0];
-          coordinateArray[coordinateIndex++] = coordinate[1];
-          coordinateArray[coordinateIndex++] = coordinate[2] || 0;
+          writeCoordinate(coordinateArray, coordinateIndex++, coordinate[0]);
+          writeCoordinate(coordinateArray, coordinateIndex++, coordinate[1]);
+          writeCoordinate(
+            coordinateArray,
+            coordinateIndex++,
+            coordinate[2] || 0
+          );
         }
         break;
       }
       case "MultiLineString":
       case "Polygon": {
-        indexes[indexIndex++] = geometry.coordinates.length;
+        writeInt(indexes, indexIndex++, geometry.coordinates.length);
         for (let ring of geometry.coordinates) {
-          indexes[indexIndex++] = ring.length;
+          writeInt(indexes, indexIndex++, ring.length);
           for (let coordinate of ring) {
-            coordinateArray[coordinateIndex++] = coordinate[0];
-            coordinateArray[coordinateIndex++] = coordinate[1];
-            coordinateArray[coordinateIndex++] = coordinate[2] || 0;
+            writeCoordinate(coordinateArray, coordinateIndex++, coordinate[0]);
+            writeCoordinate(coordinateArray, coordinateIndex++, coordinate[1]);
+            writeCoordinate(
+              coordinateArray,
+              coordinateIndex++,
+              coordinate[2] || 0
+            );
           }
         }
         break;
       }
       case "MultiPolygon": {
-        indexes[indexIndex++] = geometry.coordinates.length;
+        writeInt(indexes, indexIndex++, geometry.coordinates.length);
         for (let polygon of geometry.coordinates) {
-          indexes[indexIndex++] = polygon.length;
+          writeInt(indexes, indexIndex++, polygon.length);
           for (let ring of polygon) {
-            indexes[indexIndex++] = ring.length;
+            writeInt(indexes, indexIndex++, ring.length);
             for (let coordinate of ring) {
-              coordinateArray[coordinateIndex++] = coordinate[0];
-              coordinateArray[coordinateIndex++] = coordinate[1];
-              coordinateArray[coordinateIndex++] = coordinate[2] || 0;
+              writeCoordinate(
+                coordinateArray,
+                coordinateIndex++,
+                coordinate[0]
+              );
+              writeCoordinate(
+                coordinateArray,
+                coordinateIndex++,
+                coordinate[1]
+              );
+              writeCoordinate(
+                coordinateArray,
+                coordinateIndex++,
+                coordinate[2] || 0
+              );
             }
           }
         }
@@ -193,8 +233,8 @@ function toMemory(features) {
   }
 
   return {
-    coordinateArray,
-    indexes,
+    coordinateArray: coordinateArray._,
+    indexes: indexes._,
     featureProperties: simpleFeatures,
   };
 }
