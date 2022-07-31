@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { describe, test } from "node:test";
 import assert from "assert";
 
 const input = [
@@ -102,7 +102,9 @@ const input = [
   },
 ];
 
-// TODO: GeometryCollection?
+/**
+ * Codes for each of the geometry types.
+ */
 const GEOMETRY_TYPES = {
   Point: 0,
   MultiPoint: 1,
@@ -131,6 +133,11 @@ function writeInt(typedArrayWrapper, index, val) {
   }
 }
 
+/**
+ * Write a coordinate, a single number, to the array.
+ * This will enlarge the array by a factor of 2
+ * if it's too small.
+ */
 function writeCoordinate(typedArrayWrapper, index, val) {
   const typedArray = typedArrayWrapper._;
   const len = typedArray.length;
@@ -144,12 +151,6 @@ function writeCoordinate(typedArrayWrapper, index, val) {
   }
 }
 
-const NONE = NaN;
-
-function isSome(value) {
-  return !isNaN(value);
-}
-
 function writePosition(coordinateArray, coordinate, coordinateIndex) {
   writeCoordinate(coordinateArray, coordinateIndex++, coordinate[0]);
   writeCoordinate(coordinateArray, coordinateIndex++, coordinate[1]);
@@ -157,9 +158,34 @@ function writePosition(coordinateArray, coordinate, coordinateIndex) {
   return coordinateIndex;
 }
 
+/**
+ * z values are optional in coordinates. To make
+ * them work with strictly-typed arrays that don't support
+ * null, they're stored as NaN.
+ */
+const NONE = NaN;
+function isSome(value) {
+  return !isNaN(value);
+}
+
 function toMemory(features) {
+  /**
+   * These arrays are wrapped in objects so they can be
+   * expanded when necessary. The object provides interior
+   * mutability - TypedArrays can't be resized in place,
+   * they need to be copied.
+   *
+   * NOTE: maybe we can estimate better how big to make
+   * these initially, based on the number of features.
+   */
   const coordinateArray = { _: new Float64Array(8) };
+  /**
+   * Counts and identifiers. This contains
+   * the geometry type field, the counts of rings,
+   * coordinates.
+   */
   const indexes = { _: new Uint32Array(8) };
+  const lookup = { _: new Uint32Array(8) };
 
   let indexIndex = 0;
   let coordinateIndex = 0;
@@ -237,15 +263,20 @@ function toMemory(features) {
     }
   }
 
-  for (let feature of features) {
+  let lookupI = 0;
+  for (let i = 0; i < features.length; i++) {
+    writeInt(lookup, lookupI++, indexIndex);
+    writeInt(lookup, lookupI++, coordinateIndex);
+    const feature = features[i];
     writeGeometry(feature.geometry);
     const { geometry, type, ...rest } = feature;
     simpleFeatures.push(rest);
   }
 
   return {
-    coordinateArray: coordinateArray._,
-    indexes: indexes._,
+    coordinateArray: coordinateArray._.subarray(0, coordinateIndex),
+    indexes: indexes._.subarray(0, indexIndex),
+    lookup: lookup._.subarray(0, lookupI),
     featureProperties: simpleFeatures,
   };
 }
@@ -271,59 +302,90 @@ function getCoordinates(coordinateIndex, coordinateArray) {
   }
 }
 
-function fromMemory({ coordinateArray, indexes, featureProperties }) {
-  const features = [];
+function decodeGeometry(indexIndex, indexes, coordinateIndex, coordinateArray) {
+  const geometryCode = indexes[indexIndex++];
+  let geometryType = GEOMETRY_TYPES_INVERT[geometryCode];
+  let coordinates;
 
-  let indexIndex = 0;
-  let coordinateIndex = 0;
+  if (geometryType === undefined) {
+    throw new Error(`Unexpected geometry type code ${geometryCode}`);
+  }
 
-  function decodeGeometry() {
-    let geometryType = GEOMETRY_TYPES_INVERT[indexes[indexIndex++]];
-    let coordinates;
+  switch (geometryType) {
+    case "None": {
+      return [indexIndex, coordinateIndex, null];
+    }
+    case "GeometryCollection": {
+      const len = indexes[indexIndex++];
+      const geometries = [];
 
-    switch (geometryType) {
-      case "None": {
-        return null;
-      }
-      case "GeometryCollection": {
-        const len = indexes[indexIndex++];
-        const geometries = [];
-
-        for (let i = 0; i < len; i++) {
-          geometries.push(decodeGeometry());
-        }
-
-        return {
-          type: "GeometryCollection",
-          geometries,
-        };
-      }
-      case "Point": {
-        [coordinates, coordinateIndex] = getCoordinates(
+      for (let i = 0; i < len; i++) {
+        let geometry;
+        [indexIndex, coordinateIndex, geometry] = decodeGeometry(
+          indexIndex,
+          indexes,
           coordinateIndex,
           coordinateArray
         );
-        break;
+        geometries.push(geometry);
       }
-      case "MultiPoint":
-      case "LineString": {
+
+      return [
+        indexIndex,
+        coordinateIndex,
+        {
+          type: "GeometryCollection",
+          geometries,
+        },
+      ];
+    }
+    case "Point": {
+      [coordinates, coordinateIndex] = getCoordinates(
+        coordinateIndex,
+        coordinateArray
+      );
+      break;
+    }
+    case "MultiPoint":
+    case "LineString": {
+      const len = indexes[indexIndex++];
+      coordinates = [];
+      for (let i = 0; i < len; i++) {
+        let position;
+        [position, coordinateIndex] = getCoordinates(
+          coordinateIndex,
+          coordinateArray
+        );
+        coordinates.push(position);
+      }
+      break;
+    }
+    case "Polygon":
+    case "MultiLineString": {
+      const ringLength = indexes[indexIndex++];
+      coordinates = [];
+      for (let i = 0; i < ringLength; i++) {
         const len = indexes[indexIndex++];
-        coordinates = [];
+        const ring = [];
         for (let i = 0; i < len; i++) {
           let position;
           [position, coordinateIndex] = getCoordinates(
             coordinateIndex,
             coordinateArray
           );
-          coordinates.push(position);
+          ring.push(position);
         }
-        break;
+        coordinates.push(ring);
       }
-      case "Polygon":
-      case "MultiLineString": {
+      break;
+    }
+    case "MultiPolygon": {
+      const polygonLength = indexes[indexIndex++];
+      coordinates = [];
+      for (let i = 0; i < polygonLength; i++) {
+        const polygon = [];
         const ringLength = indexes[indexIndex++];
-        coordinates = [];
-        for (let i = 0; i < ringLength; i++) {
+        for (let j = 0; j < ringLength; j++) {
           const len = indexes[indexIndex++];
           const ring = [];
           for (let i = 0; i < len; i++) {
@@ -334,53 +396,109 @@ function fromMemory({ coordinateArray, indexes, featureProperties }) {
             );
             ring.push(position);
           }
-          coordinates.push(ring);
+          polygon.push(ring);
         }
-        break;
+        coordinates.push(polygon);
       }
-      case "MultiPolygon": {
-        const polygonLength = indexes[indexIndex++];
-        coordinates = [];
-        for (let i = 0; i < polygonLength; i++) {
-          const polygon = [];
-          const ringLength = indexes[indexIndex++];
-          for (let j = 0; j < ringLength; j++) {
-            const len = indexes[indexIndex++];
-            const ring = [];
-            for (let i = 0; i < len; i++) {
-              let position;
-              [position, coordinateIndex] = getCoordinates(
-                coordinateIndex,
-                coordinateArray
-              );
-              ring.push(position);
-            }
-            polygon.push(ring);
-          }
-          coordinates.push(polygon);
-        }
-        break;
-      }
+      break;
     }
-    return {
+  }
+  return [
+    indexIndex,
+    coordinateIndex,
+    {
       type: geometryType,
       coordinates,
-    };
-  }
+    },
+  ];
+}
+
+function arrayFromMemory({ coordinateArray, indexes, featureProperties }) {
+  const features = [];
+
+  let indexIndex = 0;
+  let coordinateIndex = 0;
 
   for (let i = 0; i < featureProperties.length; i++) {
+    let geometry;
+    [indexIndex, coordinateIndex, geometry] = decodeGeometry(
+      indexIndex,
+      indexes,
+      coordinateIndex,
+      coordinateArray
+    );
     features.push({
       ...featureProperties[i],
       type: "Feature",
-      geometry: decodeGeometry(),
+      geometry,
     });
   }
 
   return features;
 }
 
-test("memory-geojson", () => {
-  const memory = toMemory(input);
-  console.log(memory);
-  assert.deepEqual(fromMemory(memory), input);
+function featureFromMemory(
+  { coordinateArray, lookup, indexes, featureProperties },
+  i
+) {
+  let indexIndex = lookup[i * 2];
+  let coordinateIndex = lookup[i * 2 + 1];
+
+  let geometry;
+  [indexIndex, coordinateIndex, geometry] = decodeGeometry(
+    indexIndex,
+    indexes,
+    coordinateIndex,
+    coordinateArray
+  );
+  return {
+    ...featureProperties[i],
+    type: "Feature",
+    geometry,
+  };
+}
+
+function deleteFeature(
+  { coordinateArray, lookup, indexes, featureProperties },
+  i
+) {
+  let indexIndex = lookup[i * 2];
+  let coordinateIndex = lookup[i * 2 + 1];
+
+  let nextIndexIndex = lookup[(i + 1) * 2];
+  let nextCoordinateIndex = lookup[(i + 1) * 2 + 1];
+
+  // Simple case - this is the last feature.
+  if (nextIndexIndex === undefined) {
+    return {
+      lookup: lookup.subarray(0, i * 2),
+      indexes: indexes.subarray(0, indexIndex),
+      coordinateArray: indexes.subarray(0, coordinateIndex),
+      featureProperties: featureProperties.slice(0, i),
+    };
+  }
+
+  throw new Error("TODO");
+}
+
+describe("memory-geojson", () => {
+  test("round-trip", () => {
+    const memory = toMemory(input);
+    // console.log(memory);
+    assert.deepStrictEqual(arrayFromMemory(memory), input);
+  });
+  test("seek", () => {
+    const memory = toMemory(input);
+    for (let i = 0; i < input.length; i++) {
+      assert.deepStrictEqual(featureFromMemory(memory, i), input[i]);
+    }
+  });
+  test("remove", () => {
+    const memory = toMemory(input);
+    const newMemory = deleteFeature(memory, input.length - 1);
+    assert.equal(newMemory.lookup.length, memory.lookup.length - 2);
+    for (let i = 0; i < input.length - 1; i++) {
+      assert.deepStrictEqual(featureFromMemory(memory, i), input[i]);
+    }
+  });
 });
