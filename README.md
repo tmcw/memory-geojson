@@ -63,6 +63,14 @@ This schema has tradeoffs.
 - Should coordinates be Float32? I suspect that, while this would make
   encoding lossy (JavaScript floats are 52-bit), it would easily satisfy
   geospatial accuracy needs while halving the space requirement.
+- Some data updates in this format would be very expensive, and also
+  updates would require some fairly custom operations. For example,
+  adding a new coordinate in the middle of a line, in the a feature
+  in the middle of the dataset would require, probably,
+  intelligently updating the LineString length, slicing the dataset
+  into two TypedArrays, and plopping the new coordinate
+  in the middle. It's doable, but makes updates much less
+  obvious.
 - Is it useful, or beneficial, to get fancy with properties? GeoJSON
   files certainly tend to share property names and often values, so
   it's conceivable that a bunch of features with a value for a property
@@ -70,3 +78,8 @@ This schema has tradeoffs.
   hence saving valuable object space. But doing this well and not
   accidentally _increasing_ the memory requirements of some datasets
   seems like it would require compression-like logic.
+
+## Future
+
+The future of this would be to use it in [Placemark](https://www.placemark.io/),
+which would benefit from a more efficient memory encoding of features.
