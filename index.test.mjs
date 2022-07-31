@@ -7,6 +7,13 @@ const input = [
     properties: {
       x: 1,
     },
+    geometry: null,
+  },
+  {
+    type: "Feature",
+    properties: {
+      x: 1,
+    },
     geometry: {
       type: "MultiPolygon",
       coordinates: [
@@ -94,6 +101,7 @@ const GEOMETRY_TYPES = {
   Polygon: 4,
   MultiPolygon: 5,
   GeometryCollection: 6,
+  None: 7,
 };
 
 const GEOMETRY_TYPES_INVERT = Object.fromEntries(
@@ -115,6 +123,11 @@ function toMemory(features) {
   let simpleFeatures = [];
 
   function writeGeometry(geometry) {
+    if (!geometry) {
+      indexes[indexIndex++] = GEOMETRY_TYPES.None;
+      return;
+    }
+
     indexes[indexIndex++] = GEOMETRY_TYPES[geometry.type];
 
     switch (geometry.type) {
@@ -174,10 +187,7 @@ function toMemory(features) {
   }
 
   for (let feature of features) {
-    // TODO: null geometries
-
     writeGeometry(feature.geometry);
-
     const { geometry, type, ...rest } = feature;
     simpleFeatures.push(rest);
   }
@@ -200,6 +210,10 @@ function fromMemory({ coordinateArray, indexes, featureProperties }) {
     let coordinates;
 
     switch (geometryType) {
+      case "None": {
+        return null;
+        break;
+      }
       case "GeometryCollection": {
         const len = indexes[indexIndex++];
         const geometries = [];
