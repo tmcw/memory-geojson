@@ -473,7 +473,7 @@ function deleteFeature(
     return {
       lookup: lookup.subarray(0, i * 2),
       indexes: indexes.subarray(0, indexIndex),
-      coordinateArray: indexes.subarray(0, coordinateIndex),
+      coordinateArray: coordinateArray.subarray(0, coordinateIndex),
       featureProperties: featureProperties.slice(0, i),
     };
   }
