@@ -56,10 +56,11 @@ This schema has tradeoffs.
   clear that this is necessary - skipping would be simple to implement.
   However, something like an index-of-indexes could be constructed.~~
   Seeking to a specific feature is implemented!
-- It's not clear yet how to encode the z index, the 3rd item in a
+- ~~It's not clear yet how to encode the z index, the 3rd item in a
   GeoJSON Position. Right now this defaults that 3rd item to 0, but
   that is not ideal: a coordinate with z=0 is not the same as a coordinate
-  with no z value. The latter implies that the z value is unknown, not 0.
+  with no z value. The latter implies that the z value is unknown, not 0.~~
+  z indexes are encoded as NaN.
 - Could it be done with just one array, instead of separate
   arrays for indexes and coordinates?
 - Should coordinates be Float32? I suspect that, while this would make
